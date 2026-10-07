@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Atajo – tu copiloto de rutas</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{--bg:#0b1020;--card:#151c33;--card2:#1d2646;--txt:#eef1ff;--mut:#98a2c9;--acc:#35e0a1;--acc2:#5b8cff;--warn:#ffb84d;--dock:74px;--r:16px}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+#map{position:fixed;inset:0;z-index:0;background:#0b1020}
+.leaflet-control-zoom{display:none}
+.card{background:var(--card);border-radius:var(--r);box-shadow:0 6px 24px #0008}
+button{font:inherit;color:var(--txt);background:var(--card2);border:0;border-radius:12px;padding:10px 14px;cursor:pointer}
+button:active{transform:scale(.97)}
+button.primary{background:var(--acc);color:#04251a;font-weight:700}
+input,select{width:100%;font:inherit;color:var(--txt);background:var(--card2);border:1px solid #2c3764;border-radius:12px;padding:11px 12px;outline:none}
+input:focus{border-color:var(--acc2)}
+#top{position:fixed;z-index:10;left:8px;right:8px;top:calc(8px + env(safe-area-inset-top,0px));padding:10px;display:flex;flex-direction:column;gap:8px}
+.row{display:flex;gap:8px}
+.row button{flex:0 0 auto}
+.row button.primary{flex:1}
+#sug{display:none;max-height:34vh;overflow:auto;border-radius:12px;background:var(--card2)}
+#sug div{padding:11px 12px;border-bottom:1px solid #2c3764;font-size:14px}
+#sug div:last-child{border:0}
+#sheet{position:fixed;z-index:9;left:8px;right:8px;bottom:calc(var(--dock) + 8px + env(safe-area-inset-bottom,0px));padding:8px 10px 10px;max-height:44vh;overflow:auto}
+.handle{width:44px;height:5px;border-radius:3px;background:#3a4677;margin:2px auto 8px}
+#sheet.min #cards,#sheet.min .actions,#sheet.min .note{display:none}
+.rc{background:var(--card2);border:2px solid transparent;border-radius:14px;padding:10px 12px;margin-bottom:8px}
+.rc.sel{border-color:var(--acc)}
+.rc .tags{font-size:12px;color:var(--acc);font-weight:700;margin-bottom:2px}
+.rc .big{font-size:22px;font-weight:800}
+.rc .sm{font-size:13px;color:var(--mut)}
+.rc .diff{font-size:12px;margin-top:2px}
+.up{color:var(--warn)}.down{color:var(--acc)}
+.actions{display:flex;gap:6px;flex-wrap:wrap}
+.actions button{flex:1;font-size:13px;padding:10px 6px}
+.note{font-size:11px;color:var(--mut);margin:8px 2px 0;line-height:1.35}
+#hud{position:fixed;z-index:11;left:8px;right:8px;top:calc(8px + env(safe-area-inset-top,0px));background:#0f3a2c;border-radius:var(--r);padding:12px 14px;box-shadow:0 6px 24px #000a}
+#hud[hidden]{display:none}
+.hudMain{display:flex;gap:12px;align-items:center}
+#hIcon{font-size:44px;line-height:1}
+#hDist{font-size:30px;font-weight:800}
+#hText{font-size:16px}
+.hudSub{display:flex;justify-content:space-between;gap:8px;margin-top:8px;font-size:13px;color:#bff5df}
+#hudBtns{position:absolute;right:10px;top:10px;display:flex;gap:6px}
+#hudBtns button{padding:6px 10px;background:#0a281e}
+#dock{position:fixed;z-index:12;left:0;right:0;bottom:0;height:calc(var(--dock) + env(safe-area-inset-bottom,0px));padding:8px 10px calc(8px + env(safe-area-inset-bottom,0px));background:#0b1020ee;display:flex;gap:10px;align-items:center;backdrop-filter:blur(8px)}
+#mic{width:56px;height:56px;border-radius:50%;font-size:26px;padding:0;background:var(--card2)}
+#mic.on{background:var(--acc);animation:pulse 1.6s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 #35e0a188}100%{box-shadow:0 0 0 16px #35e0a100}}
+#heard{flex:1;font-size:13px;color:var(--mut);line-height:1.3;overflow:hidden}
+#dock button.sq{width:52px;height:52px;padding:0;font-size:22px}
+#music{position:fixed;z-index:20;left:8px;right:8px;bottom:calc(var(--dock) + 8px + env(safe-area-inset-bottom,0px));padding:12px;transform:translateY(130%);transition:transform .25s;pointer-events:none}
+#music.open{transform:none;pointer-events:auto}
+#ytwrap{width:200px;height:113px;border-radius:10px;overflow:hidden;background:#000;float:right;margin:0 0 8px 8px}
+#nowt{font-weight:700;font-size:15px;margin-bottom:4px}
+#nowc{font-size:12px;color:var(--mut);margin-bottom:8px}
+.ctl{display:flex;gap:8px;margin:8px 0}
+.ctl button{flex:1;font-size:20px}
+#queue{max-height:18vh;overflow:auto;font-size:13px;clear:both}
+#queue div{padding:7px 4px;border-bottom:1px solid #2c3764}
+#queue div.cur{color:var(--acc)}
+.modal{position:fixed;z-index:30;inset:0;background:#000b;display:flex;align-items:flex-end}
+.modal[hidden]{display:none}
+.modal .box{width:100%;max-height:88vh;overflow:auto;background:var(--card);border-radius:20px 20px 0 0;padding:16px 16px calc(20px + env(safe-area-inset-bottom,0px))}
+.modal label{display:block;font-size:13px;color:var(--mut);margin:12px 0 4px}
+.modal h3{margin:0 0 4px}
+.modal small{color:var(--mut);display:block;margin-top:4px;line-height:1.35}
+.modal ul{padding-left:18px;font-size:13px;color:var(--mut);line-height:1.5}
+#toast{position:fixed;z-index:40;left:50%;bottom:calc(var(--dock) + 90px);transform:translateX(-50%);background:#000d;padding:10px 16px;border-radius:20px;font-size:14px;max-width:88vw;text-align:center;display:none}
+.pin{font-size:30px;filter:drop-shadow(0 2px 3px #000);line-height:1}
+.me{width:26px;height:26px}
+.me .arrow{width:26px;height:26px;border-radius:50%;background:var(--acc2);border:3px solid #fff;box-shadow:0 0 0 6px #5b8cff55;position:relative}
+.me .arrow:after{content:"";position:absolute;left:5px;top:-9px;border:6px solid transparent;border-bottom:10px solid #fff;border-top:0}
+.leaflet-container{font:inherit}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="top" class="card">
+  <div class="row"><input id="from" placeholder="Origen (vacío = mi ubicación)" autocomplete="off"><button id="gps" title="Usar mi ubicación">📍</button></div>
+  <div class="row"><input id="to" placeholder="¿A dónde vas?" autocomplete="off"><button id="dictTo" title="Dictar destino">🎤</button><button id="pick" title="Elegir en el mapa">📌</button></div>
+  <div class="row"><button id="go" class="primary">Buscar rutas</button></div>
+  <div id="sug"></div>
+</div>
+
+<div id="hud" hidden>
+  <div class="hudMain"><div id="hIcon">⬆️</div><div><div id="hDist">—</div><div id="hText">—</div></div></div>
+  <div class="hudSub"><span id="hStreet">—</span><span id="hEta">—</span></div>
+  <div id="hudBtns"><button id="recenter">🎯</button><button id="stopNav">✖</button></div>
+</div>
+
+<div id="sheet" class="card" hidden>
+  <div class="handle" id="handle"></div>
+  <div id="cards"></div>
+  <div class="actions">
+    <button id="start" class="primary" style="flex:2">▶ Iniciar ruta</button>
+    <button id="oGM">Google Maps</button>
+    <button id="oWZ">Waze</button>
+  </div>
+  <div class="note">Los tiempos son estimados <b>sin tráfico en vivo</b>. Usa los botones de Google Maps/Waze para comparar, y deja que Atajo aprenda de tus viajes reales.</div>
+</div>
+
+<div id="music" class="card">
+  <div id="ytwrap"><div id="ytplayer"></div></div>
+  <div id="nowt">Nada sonando</div>
+  <div id="nowc">Di «Atajo, pon [canción]»</div>
+  <div class="ctl"><button id="mPrev">⏮</button><button id="mPlay">⏯</button><button id="mNext">⏭</button></div>
+  <div class="row"><input id="mq" placeholder="Buscar canción o artista"><button id="mGo">Buscar</button></div>
+  <div class="row" style="margin-top:8px"><input id="mlink" placeholder="…o pega un link de YouTube"><button id="mLinkGo">Play</button></div>
+  <div class="row" style="margin-top:8px"><input id="mvol" type="range" min="0" max="100" value="70"></div>
+  <div id="queue"></div>
+</div>
+
+<div id="dock">
+  <button id="mic">🎙️</button>
+  <div id="heard">Toca el micrófono para activar la voz. Luego di «Atajo…»</div>
+  <button class="sq" id="mus">🎵</button>
+  <button class="sq" id="cog">⚙️</button>
+</div>
+
+<div id="settings" class="modal" hidden>
+  <div class="box">
+    <h3>Ajustes</h3>
+    <label>Palabra para activar la voz</label>
+    <input id="sWake" placeholder="atajo">
+    <small>Dila antes de cada comando: «Atajo, pon Cali Pachanguero». Si la entiende mal, cámbiala por otra palabra corta.</small>
+    <label>Guía de calles (modo aprendizaje)</label>
+    <select id="sLevel">
+      <option value="0">Silencio (solo indicaciones)</option>
+      <option value="1">Poco (avenidas importantes)</option>
+      <option value="2">Normal (avenidas + lugares cercanos)</option>
+      <option value="3">Mucho (todas las calles + datos)</option>
+    </select>
+    <label>Prefiero rutas…</label>
+    <select id="sTurn">
+      <option value="0.5">Lo más rápidas aunque tengan más giros</option>
+      <option value="1">Equilibradas</option>
+      <option value="1.6">Con pocos giros (sobre todo a la izquierda)</option>
+    </select>
+    <label>Velocidad de la voz</label>
+    <input id="sRate" type="range" min="0.8" max="1.4" step="0.05">
+    <label><input id="sDj" type="checkbox" style="width:auto"> DJ personal (datos curiosos y recomendaciones)</label>
+    <label>Clave de YouTube Data API v3 (para buscar canciones por voz)</label>
+    <input id="sYt" placeholder="AIza...">
+    <small>Gratis en Google Cloud Console. Sin clave puedes pegar links de YouTube en el reproductor.</small>
+    <label>Lo que Atajo ha aprendido</label>
+    <small id="sStats"></small>
+    <div class="row" style="margin-top:10px"><button id="sTest">Probar voz</button><button id="sReset">Borrar aprendizaje</button></div>
+    <label>Comandos de voz</label>
+    <ul>
+      <li>«Atajo, pon [canción o artista]» · pausa · continúa · siguiente · sube / baja el volumen</li>
+      <li>«Atajo, llévame a [lugar]» · iniciar · cancelar ruta</li>
+      <li>«Atajo, dónde estoy» · cuánto falta</li>
+      <li>«Atajo, dato curioso» · recomiéndame música · sí / no</li>
+      <li>«Atajo, silencio» · activa la guía</li>
+    </ul>
+    <button class="primary" id="sClose" style="width:100%;margin-top:10px">Listo</button>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+"use strict";
+/* ========== utilidades ========== */
+const $=s=>document.querySelector(s);
+const store={get(k,d){try{const v=localStorage.getItem('atajo_'+k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem('atajo_'+k,JSON.stringify(v))}catch(e){}}};
+const S={wake:store.get('wake','atajo'),level:store.get('level',2),rate:store.get('rate',1),yt:store.get('yt',''),dj:store.get('dj',true),turnW:store.get('turnW',1),stats:store.get('stats',{}),seen:store.get('seen',[]),vol:store.get('vol',70)};
+function saveS(){['wake','level','rate','yt','dj','turnW','stats','seen','vol'].forEach(k=>store.set(k,S[k]))}
+const R=6371000,rad=d=>d*Math.PI/180,deg=r=>r*180/Math.PI;
+function dist(a,b){const dLat=rad(b[1]-a[1]),dLng=rad(b[0]-a[0]);const h=Math.sin(dLat/2)**2+Math.cos(rad(a[1]))*Math.cos(rad(b[1]))*Math.sin(dLng/2)**2;return 2*R*Math.asin(Math.sqrt(h))}
+function bearing(a,b){const y=Math.sin(rad(b[0]-a[0]))*Math.cos(rad(b[1]));const x=Math.cos(rad(a[1]))*Math.sin(rad(b[1]))-Math.sin(rad(a[1]))*Math.cos(rad(b[1]))*Math.cos(rad(b[0]-a[0]));return(deg(Math.atan2(y,x))+360)%360}
+function offset(p,brg,m){const d=m/R,b=rad(brg),la=rad(p[1]),lo=rad(p[0]);const la2=Math.asin(Math.sin(la)*Math.cos(d)+Math.cos(la)*Math.sin(d)*Math.cos(b));const lo2=lo+Math.atan2(Math.sin(b)*Math.sin(d)*Math.cos(la),Math.cos(d)-Math.sin(la)*Math.sin(la2));return[deg(lo2),deg(la2)]}
+const norm=s=>(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9ñ\s]/g,' ').replace(/\s+/g,' ').trim();
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+function fmtDist(m){if(m<1000){const r=m<100?Math.round(m/10)*10:Math.round(m/50)*50;return r+' m'}return(m/1000).toFixed(1)+' km'}
+function sayDist(m){if(m<1000){const r=m<100?Math.round(m/10)*10:Math.round(m/50)*50;return r+' metros'}return(m/1000).toFixed(1).replace('.',' coma ')+' kilómetros'}
+function fmtDur(s){const m=Math.max(1,Math.round(s/60));return m<60?m+' min':Math.floor(m/60)+' h '+(m%60)+' min'}
+function sayDur(s){const m=Math.max(1,Math.round(s/60));return m<60?m+' minutos':Math.floor(m/60)+' hora'+(m>=120?'s':'')+' y '+(m%60)+' minutos'}
+function cardinal(h){return['norte','noreste','este','sureste','sur','suroeste','oeste','noroeste'][Math.round(h/45)%8]}
+function toast(t,ms=3200){const el=$('#toast');el.textContent=t;el.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>el.style.display='none',ms)}
+async function fj(url,opt={},ms=9000){const c=new AbortController();const t=setTimeout(()=>c.abort(),ms);try{const r=await fetch(url,Object.assign({},opt,{signal:c.signal}));if(!r.ok)throw new Error('HTTP '+r.status);return await r.json()}finally{clearTimeout(t)}}
+function decodeHtml(s){const t=document.createElement('textarea');t.innerHTML=s;return t.value}
+
+/* ========== conocimiento de calles (Bogotá) ========== */
+const AVS=[
+ [/ciudad de cali|carrera 86\b/i,'Avenida Ciudad de Cali','es la Carrera 86 y recorre el occidente de la ciudad de norte a sur'],
+ [/caracas|carrera 14\b/i,'Avenida Caracas','es la Carrera 14 y por ella va la troncal de TransMilenio'],
+ [/s[eé]ptima|carrera 7\b/i,'Carrera Séptima','sube hacia el norte pegada a los cerros orientales'],
+ [/nqs|ciudad de quito|carrera 30\b/i,'Avenida NQS','es la Carrera 30. NQS significa Norte Quito Sur'],
+ [/boyac[aá]|carrera 72\b/i,'Avenida Boyacá','es la Carrera 72, una gran vía de norte a sur por el occidente'],
+ [/carrera 68\b/i,'Avenida Carrera 68','cruza la ciudad de norte a sur'],
+ [/calle 26\b|el dorado/i,'Avenida El Dorado','es la Calle 26 y conecta el centro con el aeropuerto'],
+ [/calle 80\b|avenida medell[ií]n/i,'Avenida Medellín','es la Calle 80, la salida hacia Medellín por el occidente'],
+ [/autopista norte|carrera 45\b/i,'Autopista Norte','es la Carrera 45 y sale de la ciudad hacia Chía y el norte'],
+ [/autopista sur/i,'Autopista Sur','sale de la ciudad hacia Soacha y el sur'],
+ [/am[eé]ricas/i,'Avenida de las Américas','conecta el centro con el suroccidente, pasando por Puente Aranda y Kennedy'],
+ [/calle 13\b/i,'Avenida Calle 13','va del centro hacia Fontibón y la salida al occidente'],
+ [/primero de mayo|1 de mayo/i,'Avenida Primero de Mayo','cruza el sur de la ciudad de oriente a occidente'],
+ [/calle 72\b|avenida chile/i,'Avenida Chile','es la Calle 72 y cruza el norte de oriente a occidente'],
+ [/calle 100\b/i,'Avenida Calle 100','cruza el norte de oriente a occidente'],
+ [/circunvalar/i,'Avenida Circunvalar','sube pegada a los cerros orientales'],
+ [/carrera 10\b|d[eé]cima/i,'Carrera Décima','cruza el centro de norte a sur']
+];
+function streetInfo(n){for(const[re,name,info]of AVS){if(re.test(n))return{name,info}}return null}
+const FACTS=[
+ 'Bogotá está a unos 2.600 metros sobre el nivel del mar.',
+ 'Las calles suben de número hacia el norte. La Calle 100 está más al norte que la Calle 26.',
+ 'Las carreras aumentan de número a medida que te alejas de los cerros orientales hacia el occidente.',
+ 'Si ves los cerros, estás mirando hacia el oriente. Es la mejor brújula de Bogotá.',
+ 'En una dirección como Calle 72 número 10 guion 34, la calle es la 72, la esquina más cercana es con la Carrera 10, y el 34 son los metros aproximados desde esa esquina.',
+ 'La Avenida Caracas es la Carrera 14 y por ella corre una de las troncales de TransMilenio, que empezó a operar en el año 2000.',
+ 'NQS significa Norte Quito Sur y es la Carrera 30.',
+ 'Monserrate está a más de 3.000 metros de altura y se ve desde casi toda la ciudad.',
+ 'La Carrera Séptima es una de las vías más emblemáticas de Bogotá y sube hacia el norte pegada a los cerros.',
+ 'Para orientarte rápido: calles van de oriente a occidente, carreras van de sur a norte.'
+];
+const SUGG=[
+ {q:'Joe Arroyo La Rebelión',t:'un clásico de la salsa colombiana'},
+ {q:'Grupo Niche Cali Pachanguero',t:'pura salsa para ir de buen ánimo'},
+ {q:'Carlos Vives La Bicicleta',t:'vallenato pop para el camino'},
+ {q:'Bomba Estéreo Fuego',t:'ritmo para no dormirse en el trancón'},
+ {q:'Juanes A Dios le pido',t:'para cantar a todo pulmón'},
+ {q:'Aterciopelados Bolero Falaz',t:'rock colombiano del bueno'},
+ {q:'Fonseca Arráncame',t:'pop tropical para relajarse'},
+ {q:'Karol G Provenza',t:'reguetón para animar el recorrido'},
+ {q:'Feid Normal',t:'algo más actual'},
+ {q:'J Balvin Mi Gente',t:'para subir el ánimo'}
+];
+
+/* ========== mapa ========== */
+const map=L.map('map',{zoomControl:false,tapHold:true,attributionControl:true}).setView([4.65,-74.08],12);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd',attribution:'© OpenStreetMap © CARTO'}).addTo(map);
+let O=null,D=null,ROUTES=[],SEL=0,layers=[],pinO=null,pinD=null,meMark=null,pickMode=false,follow=true;
+const pinIcon=e=>L.divIcon({className:'',html:'<div class="pin">'+e+'</div>',iconSize:[30,30],iconAnchor:[15,28]});
+function setPin(kind,p){const ic=pinIcon(kind==='o'?'🟢':'📍');if(kind==='o'){if(pinO)map.removeLayer(pinO);pinO=L.marker([p.lat,p.lng],{icon:ic}).addTo(map)}else{if(pinD)map.removeLayer(pinD);pinD=L.marker([p.lat,p.lng],{icon:ic}).addTo(map)}}
+function setMe(pos,h){const ll=[pos[1],pos[0]];if(!meMark){meMark=L.marker(ll,{icon:L.divIcon({className:'',html:'<div class="me"><div class="arrow"></div></div>',iconSize:[26,26],iconAnchor:[13,13]}),zIndexOffset:1000}).addTo(map)}else meMark.setLatLng(ll);const el=meMark.getElement();if(el&&h!=null){const a=el.querySelector('.arrow');if(a)a.style.transform='rotate('+h+'deg)'}}
+map.on('dragstart',()=>{if(NAV.on)follow=false});
+map.on('click',async e=>{if(!pickMode)return;pickMode=false;toast('Destino puesto en el mapa');await setPoint('d',{lat:e.latlng.lat,lng:e.latlng.lng,label:'Punto en el mapa'},true)});
+map.on('contextmenu',async e=>{await setPoint('d',{lat:e.latlng.lat,lng:e.latlng.lng,label:'Punto en el mapa'},true)});
+
+/* ========== geocodificación ========== */
+async function geocode(q){
+  const base='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&countrycodes=co&accept-language=es&viewbox=-74.25,4.85,-73.99,4.45';
+  const v=[/bogot/i.test(q)?q:q+', Bogotá'];
+  const clean=q.replace(/[#°]|\bn[o°]\.?\s/gi,' ').replace(/\s+/g,' ').trim();
+  if(clean!==q)v.push(/bogot/i.test(clean)?clean:clean+', Bogotá');
+  for(const x of v){try{const r=await fj(base+'&q='+encodeURIComponent(x));if(r.length)return r.map(i=>({label:i.display_name.split(',').slice(0,3).join(','),lat:+i.lat,lng:+i.lon}))}catch(e){}}
+  return[];
+}
+async function reverse(lat,lng){try{const r=await fj(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=17&accept-language=es&lat=${lat}&lon=${lng}`);return r.address||null}catch(e){return null}}
+function getPos(){return new Promise((res,rej)=>{if(!navigator.geolocation)return rej(new Error('Sin GPS'));navigator.geolocation.getCurrentPosition(p=>res({lat:p.coords.latitude,lng:p.coords.longitude}),e=>rej(e),{enableHighAccuracy:true,timeout:15000,maximumAge:5000})})}
+async function setPoint(kind,p,fly){
+  if(kind==='o'){O=p;setPin('o',p);$('#from').value=p.gps?'':p.label}else{D=p;setPin('d',p);$('#to').value=p.label}
+  if(fly)map.setView([p.lat,p.lng],15);hideSug();
+}
+/* autocompletado */
+let sugTimer=null,sugFor=null;
+function hideSug(){$('#sug').style.display='none'}
+function bindSug(id,kind){
+  const el=$(id);
+  el.addEventListener('input',()=>{clearTimeout(sugTimer);const q=el.value.trim();if(kind==='o'&&!q){O=null;return}if(q.length<3){hideSug();return}
+    sugTimer=setTimeout(async()=>{const r=await geocode(q);const box=$('#sug');box.innerHTML='';sugFor=kind;
+      if(!r.length){box.innerHTML='<div>No lo encontré. Prueba con un lugar conocido, o toca 📌 y elige en el mapa.</div>'}
+      r.forEach(x=>{const d=document.createElement('div');d.textContent=x.label;d.onclick=()=>setPoint(kind,x,true);box.appendChild(d)});
+      box.style.display='block'},650)});
+}
+bindSug('#from','o');bindSug('#to','d');
+$('#gps').onclick=async()=>{try{toast('Buscando tu ubicación…');const p=await getPos();await setPoint('o',{gps:true,lat:p.lat,lng:p.lng,label:'Mi ubicación'},true);toast('Origen: tu ubicación')}catch(e){toast('No pude leer el GPS. Revisa el permiso de ubicación.')}};
+$('#pick').onclick=()=>{pickMode=true;toast('Toca el mapa para elegir el destino')};
+
+/* ========== rutas ========== */
+async function osrm(pts,alts){
+  const c=pts.map(p=>p[0]+','+p[1]).join(';');
+  const j=await fj(`https://router.project-osrm.org/route/v1/driving/${c}?alternatives=${alts?'3':'false'}&steps=true&geometries=geojson&overview=full`,{},12000);
+  if(j.code!=='Ok')throw new Error(j.code);return j.routes;
+}
+function instr(s){
+  const m=s.maneuver,t=m.type,mod=m.modifier||'';
+  const mt={left:'a la izquierda','slight left':'ligeramente a la izquierda','sharp left':'cerrado a la izquierda',right:'a la derecha','slight right':'ligeramente a la derecha','sharp right':'cerrado a la derecha',straight:'derecho',uturn:'en U'}[mod]||'';
+  const n=s.name?s.name:'';
+  const icon={left:'⬅️','slight left':'↖️','sharp left':'↩️',right:'➡️','slight right':'↗️','sharp right':'↪️',straight:'⬆️',uturn:'↩️'}[mod]||'⬆️';
+  let text;
+  switch(t){
+    case'depart':text=n?`Sal por ${n}`:'Empieza a avanzar';break;
+    case'arrive':text='Llegas a tu destino';break;
+    case'roundabout':case'rotary':case'roundabout turn':text=`Entra a la glorieta${m.exit?' y toma la salida '+m.exit:''}${n?' hacia '+n:''}`;break;
+    case'turn':text=`Gira ${mt}${n?' en '+n:''}`;break;
+    case'end of road':text=`Al final de la vía gira ${mt}${n?' hacia '+n:''}`;break;
+    case'fork':text=`Mantente ${mt}${n?' hacia '+n:''}`;break;
+    case'merge':text=`Incorpórate ${mt}${n?' a '+n:''}`;break;
+    case'on ramp':text=`Toma la entrada ${mt}${n?' hacia '+n:''}`;break;
+    case'off ramp':text=`Toma la salida ${mt}${n?' hacia '+n:''}`;break;
+    case'new name':text=`Sigue por ${n||'la vía'}`;break;
+    default:text=`Continúa ${mt==='derecho'||!mt?'derecho':mt}${n?' por '+n:''}`;
+  }
+  return{text,icon};
+}
+function processRoute(r,kind){
+  const coords=r.geometry.coordinates,cum=[0];
+  for(let i=1;i<coords.length;i++)cum.push(cum[i-1]+dist(coords[i-1],coords[i]));
+  const steps=[];let acc=0,turns=0,lefts=0;
+  r.legs.forEach((leg,li)=>{const last=li===r.legs.length-1;leg.steps.forEach(s=>{
+    const t=s.maneuver.type;
+    if(t==='arrive'&&!last)return;
+    const ins=instr(s);let silent=false;
+    if(t==='depart'&&li>0)silent=true;
+    const mod=s.maneuver.modifier||'';
+    if(!silent){
+      if(t==='turn'||t==='end of road'){turns++;if(/left/.test(mod))lefts++}
+      if(mod==='uturn'){turns+=2;lefts++}
+      if(/roundabout|rotary/.test(t))turns+=.5;
+    }
+    steps.push({start:acc,dist:s.distance,name:s.name||'',text:ins.text,icon:ins.icon,type:t,silent:silent||(t==='new name'&&false)});
+    acc+=s.distance;
+  })});
+  return{coords,cum,steps,dur:r.duration,dist:r.distance,turns,lefts,kind};
+}
+function overlap(a,b){
+  const k=Math.max(1,Math.floor(a.coords.length/60)),kb=Math.max(1,Math.floor(b.coords.length/400));let n=0,t=0;
+  for(let i=0;i<a.coords.length;i+=k){t++;let m=1e9;for(let j=0;j<b.coords.length;j+=kb){const d=dist(a.coords[i],b.coords[j]);if(d<m)m=d;if(m<60)break}if(m<60)n++}
+  return n/t;
+}
+function bucket(){const h=new Date().getHours();return(h>=6&&h<9)||(h>=16&&h<20)?'pico':'valle'}
+function ratio(kind){const s=S.stats[kind+'|'+bucket()]||S.stats[kind]||S.stats.all;return s&&s.n>=1?s.avg:1}
+const adj=r=>r.dur*ratio(r.kind);
+const score=r=>adj(r)+S.turnW*(r.turns*7+r.lefts*14);
+function rankList(list){
+  list.sort((a,b)=>score(a)-score(b));
+  const byDur=[...list].sort((a,b)=>adj(a)-adj(b))[0],byTurns=[...list].sort((a,b)=>(a.turns+a.lefts)-(b.turns+b.lefts))[0];
+  list.forEach((r,i)=>{r.tags=[];if(i===0)r.tags.push('⭐ Atajo recomendado');if(r===byDur)r.tags.push('⚡ Más rápida en mapa');if(r===byTurns)r.tags.push('↱ Menos giros');if(r.kind==='detour'&&i!==0)r.tags.push('🏘️ Por barrios');if(!r.tags.length)r.tags.push('Alternativa')});
+  return list;
+}
+async function buildRoutes(o,d,light){
+  const base=await osrm([o,d],true);
+  let out=base.map((r,i)=>processRoute(r,i===0?'main':'alt'));
+  if(light)return out;
+  const best=out[0],c=best.coords,cum=best.cum,tot=cum[cum.length-1];
+  const off=Math.min(600,Math.max(150,tot*.15));
+  const jobs=[];
+  for(const f of[.3,.5,.7])for(const side of[-1,1]){
+    const idx=Math.max(1,cum.findIndex(x=>x>=tot*f));const p=c[idx],a=c[Math.max(0,idx-5)],b=c[Math.min(c.length-1,idx+5)];
+    const via=offset(p,bearing(a,b)+90*side,off);jobs.push(via);
+  }
+  const res=[];
+  for(let i=0;i<jobs.length;i+=3){
+    const part=await Promise.allSettled(jobs.slice(i,i+3).map(v=>osrm([o,v,d],false)));
+    part.forEach(x=>{if(x.status==='fulfilled'&&x.value[0])res.push(processRoute(x.value[0],'detour'))});
+  }
+  res.sort((a,b)=>a.dur-b.dur);
+  const dets=[];
+  for(const r of res){
+    if(r.dur>best.dur*1.3||r.dist>best.dist*1.4)continue;
+    if([...out,...dets].some(x=>overlap(r,x)>.88||overlap(x,r)>.88))continue;
+    dets.push(r);if(dets.length>=3)break;
+  }
+  return[...out,...dets].slice(0,6);
+}
+function clearLayers(){layers.forEach(l=>map.removeLayer(l));layers=[]}
+const COLORS=['#35e0a1','#5b8cff','#ffb84d','#e06bff','#ff6b6b','#6be0ff'];
+function drawRoutes(){
+  clearLayers();
+  ROUTES.forEach((r,i)=>{
+    const ll=r.coords.map(c=>[c[1],c[0]]);
+    const pl=L.polyline(ll,{color:i===SEL?'#35e0a1':'#6f7bb0',weight:i===SEL?7:4,opacity:i===SEL?.95:.6}).addTo(map);
+    pl.on('click',()=>{SEL=i;drawRoutes();renderCards()});layers.push(pl);
+    if(i===SEL)pl.bringToFront();
+  });
+  const sel=layers[SEL];if(sel&&!NAV.on)map.fitBounds(sel.getBounds(),{paddingTopLeft:[20,200],paddingBottomRight:[20,330]});
+}
+function renderCards(){
+  const box=$('#cards');box.innerHTML='';
+  const mainDur=adj(ROUTES.find(r=>r.kind==='main')||ROUTES[0]);
+  ROUTES.forEach((r,i)=>{
+    const d=document.createElement('div');d.className='rc'+(i===SEL?' sel':'');
+    const diff=Math.round((adj(r)-mainDur)/60);
+    const dt=r.kind==='main'?'<span class="sm">Ruta base del mapa</span>':(diff<0?`<span class="down">${-diff} min menos que la ruta base</span>`:diff>0?`<span class="up">+${diff} min vs ruta base</span>`:'<span class="sm">Igual de rápida que la base</span>');
+    d.innerHTML=`<div class="tags">${r.tags.join(' · ')}</div><div class="big">${fmtDur(adj(r))} <span class="sm">· ${(r.dist/1000).toFixed(1)} km</span></div><div class="sm">${Math.round(r.turns)} giros (${r.lefts} a la izquierda)</div><div class="diff">${dt}</div>`;
+    d.onclick=()=>{SEL=i;drawRoutes();renderCards()};box.appendChild(d);
+  });
+}
+async function findRoutes(silent){
+  if(!D){toast('Primero elige un destino');return false}
+  $('#go').textContent='Buscando…';$('#go').disabled=true;hideSug();
+  try{
+    let o=O;if(!o){const p=await getPos();O={gps:true,lat:p.lat,lng:p.lng,label:'Mi ubicación'};o=O;setPin('o',O)}
+    const list=await buildRoutes([o.lng,o.lat],[D.lng,D.lat]);
+    ROUTES=rankList(list);SEL=0;drawRoutes();renderCards();$('#sheet').hidden=false;$('#sheet').classList.remove('min');
+    return true;
+  }catch(e){toast('No pude calcular rutas ('+(e.message||e)+'). Revisa tu conexión o el permiso de ubicación.',4500);return false}
+  finally{$('#go').textContent='Buscar rutas';$('#go').disabled=false}
+}
+$('#go').onclick=()=>findRoutes();
+$('#handle').onclick=()=>$('#sheet').classList.toggle('min');
+$('#oGM').onclick=()=>{if(!O||!D)return;window.open(`https://www.google.com/maps/dir/?api=1&origin=${O.lat},${O.lng}&destination=${D.lat},${D.lng}&travelmode=driving`,'_blank')};
+$('#oWZ').onclick=()=>{if(!D)return;window.open(`https://waze.com/ul?ll=${D.lat},${D.lng}&navigate=yes`,'_blank')};
+$('#dictTo').onclick=()=>{
+  const SRc=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SRc){toast('Tu navegador no soporta dictado');return}
+  const was=wantRec;if(was)stopRec();const r=new SRc();r.lang='es-CO';r.onresult=async e=>{const t=e.results[0][0].transcript;$('#to').value=t;const g=await geocode(t);if(g[0]){await setPoint('d',g[0],true);toast('Destino: '+g[0].label)}else toast('No encontré «'+t+'»')};r.onend=()=>{if(was)startRec()};try{r.start();toast('Habla ahora…')}catch(e){}
+};
+
+/* ========== voz: hablar ========== */
+let Q=[],talking=false,cur=null,muted=false;
+function pickVoice(){const v=window.speechSynthesis?speechSynthesis.getVoices():[];return v.find(x=>x.lang==='es-CO')||v.find(x=>x.lang==='es-US')||v.find(x=>x.lang==='es-MX')||v.find(x=>x.lang&&x.lang.startsWith('es'))}
+function speak(text,pri){
+  if(!('speechSynthesis' in window)||muted)return;
+  pri=pri||'guide';
+  if(pri==='nav'||pri==='cmd'){for(let i=Q.length-1;i>=0;i--)if(Q[i].pri==='guide')Q.splice(i,1);if(cur&&cur.pri==='guide')speechSynthesis.cancel()}
+  else if(Q.length>1)return;
+  Q.push({text,pri});pump();
+}
+function pump(){
+  if(talking||!Q.length)return;
+  const it=Q.shift();cur=it;talking=true;duck(true);pauseRec();
+  const u=new SpeechSynthesisUtterance(it.text);const v=pickVoice();if(v)u.voice=v;u.lang=v?v.lang:'es-CO';u.rate=S.rate;
+  let fin=false;const done=()=>{if(fin)return;fin=true;if(cur===it){talking=false;cur=null;duck(false);resumeRec();setTimeout(pump,120)}};
+  u.onend=done;u.onerror=done;setTimeout(done,it.text.length*95+5000);
+  try{speechSynthesis.speak(u)}catch(e){done()}
+}
+if('speechSynthesis' in window)speechSynthesis.onvoiceschanged=()=>{};
+
+/* ========== voz: escuchar ========== */
+const SRn=window.SpeechRecognition||window.webkitSpeechRecognition;
+let rec=null,wantRec=false,recBusy=false,armedUntil=0;
+function initRec(){
+  rec=new SRn();rec.lang='es-CO';rec.continuous=true;rec.interimResults=false;rec.maxAlternatives=3;
+  rec.onstart=()=>{recBusy=true};
+  rec.onend=()=>{recBusy=false;if(wantRec&&!talking)setTimeout(tryStart,350)};
+  rec.onerror=e=>{if(e.error==='not-allowed'||e.error==='service-not-allowed'){wantRec=false;uiMic();toast('Permiso de micrófono denegado. Actívalo en el navegador.',4500)}};
+  rec.onresult=ev=>{for(let i=ev.resultIndex;i<ev.results.length;i++){if(ev.results[i].isFinal)handleSpeech(Array.from(ev.results[i]).map(a=>a.transcript))}};
+}
+function tryStart(){if(!wantRec||recBusy||talking)return;try{rec.start()}catch(e){}}
+function pauseRec(){if(recBusy){try{rec.stop()}catch(e){}}}
+function resumeRec(){if(wantRec)setTimeout(tryStart,300)}
+function startRec(){if(!SRn){toast('Este navegador no soporta reconocimiento de voz. Usa Chrome en Android.',4500);return}if(!rec)initRec();wantRec=true;uiMic();tryStart();try{speechSynthesis.speak(new SpeechSynthesisUtterance(''))}catch(e){}}
+function stopRec(){wantRec=false;if(recBusy){try{rec.stop()}catch(e){}}uiMic()}
+function uiMic(){$('#mic').classList.toggle('on',wantRec);if(!wantRec)$('#heard').textContent='Toca el micrófono para activar la voz. Luego di «'+S.wake+'…»';else $('#heard').textContent='Escuchando… di «'+S.wake+'» y tu comando'}
+$('#mic').onclick=()=>{wantRec?stopRec():startRec()};
+function handleSpeech(alts){
+  const wk=norm(S.wake);let cmd=null;
+  for(const a of alts){const n=norm(a),i=n.indexOf(wk);if(i>=0){cmd=n.slice(i+wk.length).trim();break}}
+  const heard=alts[0];
+  if(cmd===null){if(Date.now()<armedUntil)cmd=norm(heard);else return}
+  $('#heard').textContent='Escuché: «'+heard+'»';
+  if(cmd===''){armedUntil=Date.now()+8000;speak('Dime','cmd');return}
+  armedUntil=0;runCommand(cmd);
+}
+async function runCommand(cmd){
+  let x;
+  if(x=cmd.match(/^(?:pon|ponme|poner|reproduce|coloca|toca|play)\s+(?:la cancion\s+|me\s+)?(.+)$/))return playQuery(x[1]);
+  if(/^(pausa|pausar|pausalo|para la musica|detener musica|stop)/.test(cmd))return mCtl('pause');
+  if(/^(continua|continuar|reanuda|reanudar|sigue|dale play|play)$/.test(cmd))return mCtl('play');
+  if(/siguiente|otra cancion|pasa la cancion|salta/.test(cmd))return mCtl('next');
+  if(/anterior|devuelve/.test(cmd))return mCtl('prev');
+  if(/sube.*volumen|volumen.*(arriba|mas)|mas alto|subele/.test(cmd))return setVol(Math.min(100,S.vol+20),true);
+  if(/baja.*volumen|volumen.*(abajo|menos)|mas bajo|bajale/.test(cmd))return setVol(Math.max(0,S.vol-20),true);
+  if(/dato|cuentame algo|sabias|curios/.test(cmd))return speak(pick(FACTS),'cmd');
+  if(/recomiend|sorprend|dj|que pongo/.test(cmd))return djSuggest();
+  if(/^(si|dale|ponla|va|claro|listo|ok|bueno)$/.test(cmd)){if(MP.pending){const s=MP.pending;MP.pending=null;return playQuery(s.q)}return mCtl('play')}
+  if(/^(no|nel|no gracias|otra)$/.test(cmd)){if(MP.pending){MP.pending=null;return djSuggest()}return}
+  if(/donde estoy|que calle|en que calle|que avenida/.test(cmd))return whereAmI();
+  if(/cuanto falta|cuando llego|a que hora llego|cuando llegamos/.test(cmd)){if(NAV.on)return speak(`Faltan ${sayDist(NAV.remain||0)}, unos ${sayDur(NAV.remDur||0)}.`,'cmd');return speak('Aún no hay una ruta en marcha.','cmd')}
+  if(/silencio|callate|no hables|sin guia/.test(cmd)){S.level=0;saveS();return speak('Guía de calles apagada. Solo te daré las indicaciones.','cmd')}
+  if(/activa.*guia|habla|modo aprendizaje|ensename/.test(cmd)){S.level=2;saveS();return speak('Guía de calles activada.','cmd')}
+  if(x=cmd.match(/(?:navega|navegar|llevame|ir|ruta|vamos)\s+(?:a|al|a la|hacia)\s+(.+)/)){
+    const g=await geocode(x[1]);if(!g[0])return speak('No encontré ese lugar. Prueba con otro nombre.','cmd');
+    await setPoint('d',g[0],true);const ok=await findRoutes();
+    if(ok)speak(`Encontré ${ROUTES.length} rutas. La recomendada tarda ${sayDur(adj(ROUTES[0]))}. Di iniciar para empezar.`,'cmd');return;
+  }
+  if(/iniciar|empezar|arranca|vamos|comenzar/.test(cmd)){if(ROUTES.length)return startNav();return speak('Primero dime a dónde vas.','cmd')}
+  if(/cancelar|detener ruta|terminar ruta|parar navegacion/.test(cmd)){if(NAV.on){stopNav();return speak('Ruta cancelada.','cmd')}return}
+  speak('No te entendí. Puedes decir: pon una canción, siguiente, pausa, dónde estoy, o llévame a un lugar.','cmd');
+}
+
+/* ========== música (YouTube) ========== */
+const MP={ready:false,player:null,queue:[],i:-1,pending:null,loading:false};
+window.onYouTubeIframeAPIReady=()=>{
+  MP.player=new YT.Player('ytplayer',{width:'200',height:'113',playerVars:{playsinline:1,rel:0},events:{onReady:()=>{MP.ready=true;MP.player.setVolume(S.vol)},onStateChange:onYT,onError:()=>{toast('Ese video no se puede reproducir aquí. Paso al siguiente.');mCtl('next')}}});
+};
+(function(){const s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';s.async=true;document.head.appendChild(s)})();
+function onYT(e){
+  if(e.data===0)mCtl('next');
+  if(e.data===1){try{const d=MP.player.getVideoData();if(d&&d.title){$('#nowt').textContent=d.title;$('#nowc').textContent=d.author||''}}catch(x){}}
+}
+async function searchYT(q){
+  if(!S.yt)throw new Error('nokey');
+  const j=await fj(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoCategoryId=10&videoEmbeddable=true&maxResults=10&q=${encodeURIComponent(q)}&key=${encodeURIComponent(S.yt)}`);
+  return(j.items||[]).map(i=>({id:i.id.videoId,title:decodeHtml(i.snippet.title),ch:decodeHtml(i.snippet.channelTitle)}));
+}
+async function playQuery(q){
+  if(!S.yt){speak('Necesito tu clave de YouTube en los ajustes para buscar canciones. Abro YouTube Music con tu búsqueda.','cmd');window.open('https://music.youtube.com/search?q='+encodeURIComponent(q),'_blank');return}
+  speak('Poniendo '+q,'cmd');
+  try{const r=await searchYT(q);if(!r.length){speak('No encontré resultados para '+q,'cmd');return}MP.queue=r;MP.i=-1;mCtl('next');renderQueue()}
+  catch(e){speak('No pude buscar en YouTube. Revisa tu clave o el cupo diario.','cmd')}
+}
+function loadItem(it){if(!MP.ready){toast('El reproductor aún está cargando…');return}MP.player.loadVideoById(it.id);$('#nowt').textContent=it.title;$('#nowc').textContent=it.ch||'';renderQueue()}
+function mCtl(a){
+  if(!MP.ready&&a!=='x'){toast('El reproductor de YouTube aún no carga');return}
+  if(a==='pause')MP.player.pauseVideo();
+  else if(a==='play')MP.player.playVideo();
+  else if(a==='next'){if(MP.i+1<MP.queue.length){MP.i++;loadItem(MP.queue[MP.i])}else if(MP.queue.length){const last=MP.queue[MP.queue.length-1];djSuggest(true)}}
+  else if(a==='prev'){if(MP.i>0){MP.i--;loadItem(MP.queue[MP.i])}}
+}
+function renderQueue(){const b=$('#queue');b.innerHTML='';MP.queue.forEach((q,i)=>{const d=document.createElement('div');d.textContent=q.title;if(i===MP.i)d.className='cur';d.onclick=()=>{MP.i=i;loadItem(q)};b.appendChild(d)})}
+function setVol(v,say){S.vol=v;saveS();$('#mvol').value=v;if(MP.ready)MP.player.setVolume(v);if(say)speak('Volumen al '+v+' por ciento','cmd')}
+function duck(on){if(!MP.ready)return;try{MP.player.setVolume(on?Math.max(8,Math.round(S.vol*.3)):S.vol)}catch(e){}}
+function ytId(s){const m=s.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([\w-]{11})/);return m?m[1]:(/^[\w-]{11}$/.test(s)?s:null)}
+$('#mLinkGo').onclick=()=>{const id=ytId($('#mlink').value.trim());if(!id){toast('Link no válido');return}MP.queue=[{id,title:'Video de YouTube',ch:''}];MP.i=0;loadItem(MP.queue[0])};
+$('#mGo').onclick=()=>{const q=$('#mq').value.trim();if(q)playQuery(q)};
+$('#mPlay').onclick=()=>{if(!MP.ready)return;const st=MP.player.getPlayerState();mCtl(st===1?'pause':'play')};
+$('#mNext').onclick=()=>mCtl('next');$('#mPrev').onclick=()=>mCtl('prev');
+$('#mvol').oninput=e=>setVol(+e.target.value,false);
+$('#mus').onclick=()=>$('#music').classList.toggle('open');
+function djSuggest(auto){const s=pick(SUGG);MP.pending=s;armedUntil=Date.now()+12000;speak((auto?'Se acabó la lista. ':'')+'Te recomiendo '+s.q+', '+s.t+'. ¿La pongo? Di sí o no.','cmd')}
+
+/* ========== navegación ========== */
+const NAV={on:false,route:null,watch:null,idx:0,j:-1,flags:{},told:{},start:0,off:0,last:null,heading:null,rr:false,rerouted:false,estStart:0,poiAt:0,factAt:0,djAt:0,remain:0,remDur:0,lock:null};
+function markSeen(n){if(!S.seen.includes(n)){S.seen.push(n);saveS()}}
+function guideStreet(name){
+  if(!name||S.level===0)return;
+  const info=streetInfo(name);
+  if(info){if(!NAV.told['av'+info.name]){NAV.told['av'+info.name]=1;markSeen(info.name);speak(`Ahora vas por la ${info.name}. ${info.info}.`,'guide')}return}
+  if(S.level>=2){
+    const m=name.match(/calle\s*(\d+)/i),c=name.match(/carrera\s*(\d+)/i);
+    if(m&&!NAV.told.tipC){NAV.told.tipC=1;speak(`Estás en la ${name.replace(/^avenida\s+/i,'')}. Recuerda que las calles suben de número hacia el norte.`,'guide');return}
+    if(c&&!NAV.told.tipK){NAV.told.tipK=1;speak(`Estás en la ${name.replace(/^avenida\s+/i,'')}. Las carreras aumentan de número hacia el occidente.`,'guide');return}
+  }
+  if(S.level>=3&&!NAV.told['n'+name]){NAV.told['n'+name]=1;speak('Ahora estás en '+name+'.','guide')}
+}
+async function nearPOIs(pos){
+  const la=pos[1],lo=pos[0];
+  const q=`[out:json][timeout:8];(nwr(around:300,${la},${lo})["shop"="mall"]["name"];nwr(around:250,${la},${lo})["amenity"~"^(hospital|university|marketplace|theatre)$"]["name"];nwr(around:250,${la},${lo})["leisure"="park"]["name"];nwr(around:250,${la},${lo})["tourism"~"^(museum|attraction)$"]["name"];);out center tags 15;`;
+  try{
+    const j=await fj('https://overpass-api.de/api/interpreter',{method:'POST',body:'data='+encodeURIComponent(q),headers:{'Content-Type':'application/x-www-form-urlencoded'}},9000);
+    const out=[];
+    for(const e of(j.elements||[])){
+      const n=e.tags&&e.tags.name;if(!n||NAV.told['p'+n])continue;
+      const lat=e.lat||(e.center&&e.center.lat),lon=e.lon||(e.center&&e.center.lon);if(lat==null)continue;
+      const t=e.tags;const kind=t.shop==='mall'?'el centro comercial':t.amenity==='hospital'?'el hospital':t.amenity==='university'?'la universidad':t.amenity==='marketplace'?'la plaza de mercado':t.amenity==='theatre'?'el teatro':t.leisure==='park'?'el parque':t.tourism==='museum'?'el museo':'el sitio turístico';
+      out.push({n,kind,lat,lon,d:dist(pos,[lon,lat])});
+    }
+    out.sort((a,b)=>a.d-b.d);return out;
+  }catch(e){return[]}
+}
+async function guidePOI(pos){
+  if(S.level<2||NAV.poiBusy)return;
+  const gap=S.level>=3?40000:90000;if(Date.now()-NAV.poiAt<gap)return;
+  NAV.poiAt=Date.now();NAV.poiBusy=true;
+  const list=await nearPOIs(pos);NAV.poiBusy=false;
+  const p=list[0];if(!p||talking)return;
+  NAV.told['p'+p.n]=1;
+  let side='cerca';
+  if(NAV.heading!=null){const rel=(bearing(pos,[p.lon,p.lat])-NAV.heading+360)%360;side=rel>20&&rel<160?'a tu derecha':rel>200&&rel<340?'a tu izquierda':rel<=20||rel>=340?'al frente':'atrás'}
+  speak(`${side==='cerca'?'Cerca de aquí queda':side.charAt(0).toUpperCase()+side.slice(1)+' queda'} ${p.kind} ${p.n}.`,'guide');
+}
+function locate(pos){
+  const c=NAV.route.coords;let best=NAV.idx,bd=1e9;
+  const hi=Math.min(c.length-1,NAV.idx+250);
+  for(let i=NAV.idx;i<=hi;i++){const d=dist(pos,c[i]);if(d<bd){bd=d;best=i}}
+  if(bd>60){for(let i=0;i<c.length;i++){const d=dist(pos,c[i]);if(d<bd){bd=d;best=i}}}
+  return{i:best,d:bd};
+}
+function onPos(p){
+  const c=p.coords;if(c.accuracy>120)return;
+  const pos=[c.longitude,c.latitude];
+  let hd=(c.heading!=null&&!isNaN(c.heading)&&c.speed>1.5)?c.heading:null;
+  if(hd==null&&NAV.last&&dist(NAV.last,pos)>10)hd=bearing(NAV.last,pos);
+  if(hd!=null)NAV.heading=hd;
+  if(!NAV.last||dist(NAV.last,pos)>10)NAV.last=pos;
+  setMe(pos,NAV.heading);
+  if(follow)map.setView([pos[1],pos[0]],Math.max(map.getZoom(),17),{animate:true});
+  if(!NAV.on||NAV.rr)return;
+  const r=NAV.route,loc=locate(pos);
+  if(loc.d>70){if(++NAV.off>=3){reroute(pos);return}}else NAV.off=0;
+  NAV.idx=loc.i;const prog=r.cum[loc.i],tot=r.cum[r.cum.length-1];
+  let j=0;for(let k=0;k<r.steps.length;k++){if(r.steps[k].start<=prog+8)j=k;else break}
+  let nk=-1;for(let k=j+1;k<r.steps.length;k++){if(!r.steps[k].silent){nk=k;break}}
+  const nxt=nk>=0?r.steps[nk]:null;
+  if(j!==NAV.j){NAV.j=j;const st=r.steps[j];$('#hStreet').textContent=st.name||'—';guideStreet(st.name)}
+  const remain=Math.max(0,tot-prog);NAV.remain=remain;NAV.remDur=NAV.estStart*(remain/tot);
+  if(nxt){
+    const d=nxt.start-prog;$('#hDist').textContent=fmtDist(Math.max(0,d));$('#hText').textContent=nxt.text;$('#hIcon').textContent=nxt.icon;
+    if(nxt.type==='arrive'){if(remain<35){arrive();return}}
+    const len=r.steps[j].dist;
+    if(d<=260&&len>330&&!NAV.flags[nk+'f']){NAV.flags[nk+'f']=1;speak(`En ${sayDist(d)}, ${nxt.text}`,'nav')}
+    if(d<=70&&!NAV.flags[nk+'n']){NAV.flags[nk+'n']=1;NAV.flags[nk+'f']=1;speak(nxt.text,'nav')}
+  }
+  const eta=new Date(Date.now()+NAV.remDur*1000);
+  $('#hEta').textContent=`${fmtDist(remain)} · ${fmtDur(NAV.remDur)} · llegas ${eta.getHours()}:${String(eta.getMinutes()).padStart(2,'0')}${NAV.heading!=null?' · hacia el '+cardinal(NAV.heading):''}`;
+  guidePOI(pos);
+  djTick();
+}
+function djTick(){
+  if(!S.dj||talking)return;const now=Date.now();
+  if(now-NAV.djAt<360000)return;
+  if(NAV.djAt===0){NAV.djAt=now;return}
+  NAV.djAt=now;
+  const playing=MP.ready&&MP.player.getPlayerState&&MP.player.getPlayerState()===1;
+  if(playing||Math.random()<.5)speak(pick(['¿Sabías que? ','Dato del camino: '])+pick(FACTS),'guide');else djSuggest();
+}
+async function reroute(pos){
+  if(NAV.rr)return;NAV.rr=true;NAV.rerouted=true;speak('Recalculando ruta','nav');
+  try{const rs=await buildRoutes(pos,[D.lng,D.lat],true);const best=rankList(rs)[0];NAV.route=best;NAV.idx=0;NAV.flags={};NAV.j=-1;NAV.estStart=adj(best);ROUTES=[best];SEL=0;drawRoutes()}catch(e){toast('No pude recalcular. Sigue las indicaciones o reinicia la ruta.')}
+  NAV.off=0;NAV.rr=false;
+}
+async function startNav(){
+  if(!ROUTES.length)return;
+  const r=ROUTES[SEL];if(!navigator.geolocation){toast('Sin GPS');return}
+  Object.assign(NAV,{on:true,route:r,idx:0,j:-1,flags:{},told:{},start:Date.now(),off:0,rr:false,rerouted:false,estStart:adj(r),poiAt:Date.now(),djAt:0});
+  follow=true;$('#top').style.display='none';$('#sheet').hidden=true;$('#hud').hidden=false;$('#music').classList.remove('open');
+  clearLayers();const pl=L.polyline(r.coords.map(c=>[c[1],c[0]]),{color:'#35e0a1',weight:8,opacity:.9}).addTo(map);layers.push(pl);
+  NAV.watch=navigator.geolocation.watchPosition(onPos,e=>toast('Error de GPS: '+e.message),{enableHighAccuracy:true,maximumAge:1000,timeout:20000});
+  try{if('wakeLock' in navigator)NAV.lock=await navigator.wakeLock.request('screen')}catch(e){}
+  try{speechSynthesis.speak(new SpeechSynthesisUtterance(''))}catch(e){}
+  if(!wantRec&&SRn)startRec();
+  const first=r.steps.find(s=>!s.silent)||r.steps[0];
+  speak(`Ruta iniciada. ${sayDur(NAV.estStart)} aproximadamente. ${first.text}. Si quieres música, di ${S.wake} pon, y el nombre de la canción.`,'nav');
+}
+function recordTrip(){
+  if(NAV.rerouted)return;const real=(Date.now()-NAV.start)/1000,est=NAV.route.dur;if(real<120||est<60)return;
+  const rt=Math.min(4,Math.max(.5,real/est));
+  [ 'all',NAV.route.kind,NAV.route.kind+'|'+bucket()].forEach(k=>{const s=S.stats[k]||{n:0,avg:1};s.avg=(s.avg*s.n+rt)/(s.n+1);s.n++;S.stats[k]=s});
+  saveS();
+}
+function arrive(){if(!NAV.on)return;speak('Llegaste a tu destino.','nav');recordTrip();stopNav(true)}
+function stopNav(){
+  NAV.on=false;if(NAV.watch!=null)navigator.geolocation.clearWatch(NAV.watch);NAV.watch=null;
+  try{if(NAV.lock)NAV.lock.release()}catch(e){}NAV.lock=null;
+  $('#hud').hidden=true;$('#top').style.display='flex';follow=false;
+  if(ROUTES.length){$('#sheet').hidden=false;drawRoutes()}else clearLayers();
+}
+$('#start').onclick=startNav;$('#stopNav').onclick=()=>{stopNav();toast('Ruta terminada')};
+$('#recenter').onclick=()=>{follow=true;if(NAV.last)map.setView([NAV.last[1],NAV.last[0]],17)};
+document.addEventListener('visibilitychange',async()=>{if(NAV.on&&document.visibilityState==='visible'&&'wakeLock' in navigator){try{NAV.lock=await navigator.wakeLock.request('screen')}catch(e){}}});
+async function whereAmI(){
+  if(NAV.on&&NAV.route&&NAV.j>=0){const n=NAV.route.steps[NAV.j].name;if(n){const i=streetInfo(n);return speak(i?`Estás en la ${i.name}. ${i.info}.`:`Estás en ${n}.`,'cmd')}}
+  try{const p=await getPos();const a=await reverse(p.lat,p.lng);if(a){const road=a.road||'una vía sin nombre';const bar=a.suburb||a.neighbourhood||a.city_district||'';return speak(`Estás en ${road}${bar?', en el barrio '+bar:''}.`,'cmd')}}catch(e){}
+  speak('No pude ubicarte ahora mismo.','cmd');
+}
+
+/* ========== ajustes ========== */
+function statsText(){
+  const a=S.stats.all;const t=a?`${a.n} viaje${a.n===1?'':'s'} medido${a.n===1?'':'s'}. En promedio tardas ${a.avg.toFixed(2)}× lo que estima el mapa.`:'Aún no hay viajes medidos. Haz un viaje completo con «Iniciar ruta» y Atajo ajustará sus estimaciones.';
+  return t+` Avenidas conocidas: ${S.seen.length}${S.seen.length?' ('+S.seen.join(', ')+')':''}.`;
+}
+$('#cog').onclick=()=>{$('#sWake').value=S.wake;$('#sLevel').value=S.level;$('#sTurn').value=S.turnW;$('#sRate').value=S.rate;$('#sDj').checked=S.dj;$('#sYt').value=S.yt;$('#sStats').textContent=statsText();$('#settings').hidden=false};
+$('#sClose').onclick=()=>{S.wake=($('#sWake').value||'atajo').trim().toLowerCase();S.level=+$('#sLevel').value;S.turnW=+$('#sTurn').value;S.rate=+$('#sRate').value;S.dj=$('#sDj').checked;S.yt=$('#sYt').value.trim();saveS();$('#settings').hidden=true;uiMic();if(ROUTES.length&&!NAV.on){ROUTES=rankList(ROUTES);SEL=0;drawRoutes();renderCards()}};
+$('#sTest').onclick=()=>{S.rate=+$('#sRate').value;try{speechSynthesis.cancel()}catch(e){}speak('Hola, soy tu copiloto. Ahora vas por la Avenida Caracas. Es la Carrera 14.','cmd')};
+$('#sReset').onclick=()=>{if(confirm('¿Borrar lo aprendido de tus viajes?')){S.stats={};S.seen=[];saveS();$('#sStats').textContent=statsText()}};
+document.addEventListener('click',e=>{if(!e.target.closest('#top'))hideSug()});
+$('#mvol').value=S.vol;uiMic();
+if('geolocation' in navigator){getPos().then(p=>{map.setView([p.lat,p.lng],14);setMe([p.lng,p.lat],null)}).catch(()=>{})}
+</script>
+</body>
+</html>
