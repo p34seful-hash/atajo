@@ -105,7 +105,7 @@ input:focus{border-color:var(--acc2)}
     <button id="oGM">Google Maps</button>
     <button id="oWZ">Waze</button>
   </div>
-  <div class="note">Los tiempos son estimados <b>sin tráfico en vivo</b>. Usa los botones de Google Maps/Waze para comparar, y deja que Atajo aprenda de tus viajes reales.</div>
+  <div class="note" id="note"></div>
 </div>
 
 <div id="music" class="card">
@@ -148,6 +148,9 @@ input:focus{border-color:var(--acc2)}
     <label>Velocidad de la voz</label>
     <input id="sRate" type="range" min="0.8" max="1.4" step="0.05">
     <label><input id="sDj" type="checkbox" style="width:auto"> DJ personal (datos curiosos y recomendaciones)</label>
+    <label>Token de Mapbox (tráfico en vivo y mejor búsqueda de direcciones)</label>
+    <input id="sMb" placeholder="pk.eyJ...">
+    <small>Gratis en mapbox.com. Sin token, Atajo usa rutas sin tráfico en vivo.</small>
     <label>Clave de YouTube Data API v3 (para buscar canciones por voz)</label>
     <input id="sYt" placeholder="AIza...">
     <small>Gratis en Google Cloud Console. Sin clave puedes pegar links de YouTube en el reproductor.</small>
@@ -173,8 +176,8 @@ input:focus{border-color:var(--acc2)}
 /* ========== utilidades ========== */
 const $=s=>document.querySelector(s);
 const store={get(k,d){try{const v=localStorage.getItem('atajo_'+k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem('atajo_'+k,JSON.stringify(v))}catch(e){}}};
-const S={wake:store.get('wake','atajo'),level:store.get('level',2),rate:store.get('rate',1),yt:store.get('yt',''),dj:store.get('dj',true),turnW:store.get('turnW',1),stats:store.get('stats',{}),seen:store.get('seen',[]),vol:store.get('vol',70)};
-function saveS(){['wake','level','rate','yt','dj','turnW','stats','seen','vol'].forEach(k=>store.set(k,S[k]))}
+const S={wake:store.get('wake','atajo'),level:store.get('level',2),rate:store.get('rate',1),yt:store.get('yt',''),dj:store.get('dj',true),turnW:store.get('turnW',1),stats:store.get('stats',{}),seen:store.get('seen',[]),vol:store.get('vol',70),mb:store.get('mb','')};
+function saveS(){['wake','level','rate','yt','dj','turnW','stats','seen','vol','mb'].forEach(k=>store.set(k,S[k]))}
 const R=6371000,rad=d=>d*Math.PI/180,deg=r=>r*180/Math.PI;
 function dist(a,b){const dLat=rad(b[1]-a[1]),dLng=rad(b[0]-a[0]);const h=Math.sin(dLat/2)**2+Math.cos(rad(a[1]))*Math.cos(rad(b[1]))*Math.sin(dLng/2)**2;return 2*R*Math.asin(Math.sqrt(h))}
 function bearing(a,b){const y=Math.sin(rad(b[0]-a[0]))*Math.cos(rad(b[1]));const x=Math.cos(rad(a[1]))*Math.sin(rad(b[1]))-Math.sin(rad(a[1]))*Math.cos(rad(b[1]))*Math.cos(rad(b[0]-a[0]));return(deg(Math.atan2(y,x))+360)%360}
@@ -249,6 +252,7 @@ map.on('contextmenu',async e=>{await setPoint('d',{lat:e.latlng.lat,lng:e.latlng
 
 /* ========== geocodificación ========== */
 async function geocode(q){
+  if(S.mb){try{const c=map.getCenter();const r=await fj(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${encodeURIComponent(S.mb)}&country=co&language=es&limit=6&proximity=${c.lng},${c.lat}`);if(r.features&&r.features.length)return r.features.map(f=>({label:f.place_name.split(',').slice(0,3).join(','),lat:f.center[1],lng:f.center[0]}))}catch(e){}}
   const base='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&countrycodes=co&accept-language=es&viewbox=-74.25,4.85,-73.99,4.45';
   const v=[/bogot/i.test(q)?q:q+', Bogotá'];
   const clean=q.replace(/[#°]|\bn[o°]\.?\s/gi,' ').replace(/\s+/g,' ').trim();
@@ -280,8 +284,11 @@ $('#pick').onclick=()=>{pickMode=true;toast('Toca el mapa para elegir el destino
 /* ========== rutas ========== */
 async function osrm(pts,alts){
   const c=pts.map(p=>p[0]+','+p[1]).join(';');
-  const j=await fj(`https://router.project-osrm.org/route/v1/driving/${c}?alternatives=${alts?'3':'false'}&steps=true&geometries=geojson&overview=full`,{},12000);
-  if(j.code!=='Ok')throw new Error(j.code);return j.routes;
+  const url=S.mb
+    ?`https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${c}?alternatives=${alts?'true':'false'}&steps=true&geometries=geojson&overview=full&access_token=${encodeURIComponent(S.mb)}`
+    :`https://router.project-osrm.org/route/v1/driving/${c}?alternatives=${alts?'3':'false'}&steps=true&geometries=geojson&overview=full`;
+  const j=await fj(url,{},12000);
+  if(j.code!=='Ok')throw new Error(j.code||j.message||'sin ruta');return j.routes;
 }
 function instr(s){
   const m=s.maneuver,t=m.type,mod=m.modifier||'';
@@ -313,6 +320,7 @@ function processRoute(r,kind){
     if(t==='arrive'&&!last)return;
     const ins=instr(s);let silent=false;
     if(t==='depart'&&li>0)silent=true;
+    if(t==='notification'||t==='exit roundabout'||t==='exit rotary')silent=true;
     const mod=s.maneuver.modifier||'';
     if(!silent){
       if(t==='turn'||t==='end of road'){turns++;if(/left/.test(mod))lefts++}
@@ -330,7 +338,7 @@ function overlap(a,b){
   return n/t;
 }
 function bucket(){const h=new Date().getHours();return(h>=6&&h<9)||(h>=16&&h<20)?'pico':'valle'}
-function ratio(kind){const s=S.stats[kind+'|'+bucket()]||S.stats[kind]||S.stats.all;return s&&s.n>=1?s.avg:1}
+function ratio(kind){const p=S.mb?'t:':'';const s=S.stats[p+kind+'|'+bucket()]||S.stats[p+kind]||S.stats[p+'all'];return s&&s.n>=1?s.avg:1}
 const adj=r=>r.dur*ratio(r.kind);
 const score=r=>adj(r)+S.turnW*(r.turns*7+r.lefts*14);
 function rankList(list){
@@ -395,7 +403,7 @@ async function findRoutes(silent){
     const list=await buildRoutes([o.lng,o.lat],[D.lng,D.lat]);
     ROUTES=rankList(list);SEL=0;drawRoutes();renderCards();$('#sheet').hidden=false;$('#sheet').classList.remove('min');
     return true;
-  }catch(e){toast('No pude calcular rutas ('+(e.message||e)+'). Revisa tu conexión o el permiso de ubicación.',4500);return false}
+  }catch(e){const m=String(e.message||e);toast(S.mb&&/401|403/.test(m)?'El token de Mapbox no es válido. Revisa que lo copiaste completo (empieza por pk.).':'No pude calcular rutas ('+m+'). Revisa tu conexión o el permiso de ubicación.',5000);return false}
   finally{$('#go').textContent='Buscar rutas';$('#go').disabled=false}
 }
 $('#go').onclick=()=>findRoutes();
@@ -627,7 +635,7 @@ async function startNav(){
 function recordTrip(){
   if(NAV.rerouted)return;const real=(Date.now()-NAV.start)/1000,est=NAV.route.dur;if(real<120||est<60)return;
   const rt=Math.min(4,Math.max(.5,real/est));
-  [ 'all',NAV.route.kind,NAV.route.kind+'|'+bucket()].forEach(k=>{const s=S.stats[k]||{n:0,avg:1};s.avg=(s.avg*s.n+rt)/(s.n+1);s.n++;S.stats[k]=s});
+  const p=S.mb?'t:':'';[p+'all',p+NAV.route.kind,p+NAV.route.kind+'|'+bucket()].forEach(k=>{const s=S.stats[k]||{n:0,avg:1};s.avg=(s.avg*s.n+rt)/(s.n+1);s.n++;S.stats[k]=s});
   saveS();
 }
 function arrive(){if(!NAV.on)return;speak('Llegaste a tu destino.','nav');recordTrip();stopNav(true)}
@@ -647,16 +655,17 @@ async function whereAmI(){
 }
 
 /* ========== ajustes ========== */
+function updNote(){$('#note').innerHTML=S.mb?'Tiempos con <b>tráfico en vivo</b> (Mapbox) del momento en que buscas. Compara con Google Maps/Waze y deja que Atajo aprenda de tus viajes.':'Tiempos <b>sin tráfico en vivo</b>. Pon tu token de Mapbox en ⚙️ para activarlo. Usa los botones de Google Maps/Waze para comparar.'}
 function statsText(){
-  const a=S.stats.all;const t=a?`${a.n} viaje${a.n===1?'':'s'} medido${a.n===1?'':'s'}. En promedio tardas ${a.avg.toFixed(2)}× lo que estima el mapa.`:'Aún no hay viajes medidos. Haz un viaje completo con «Iniciar ruta» y Atajo ajustará sus estimaciones.';
+  const a=S.stats[(S.mb?'t:':'')+'all'];const t=a?`${a.n} viaje${a.n===1?'':'s'} medido${a.n===1?'':'s'}. En promedio tardas ${a.avg.toFixed(2)}× lo que estima el mapa.`:'Aún no hay viajes medidos. Haz un viaje completo con «Iniciar ruta» y Atajo ajustará sus estimaciones.';
   return t+` Avenidas conocidas: ${S.seen.length}${S.seen.length?' ('+S.seen.join(', ')+')':''}.`;
 }
-$('#cog').onclick=()=>{$('#sWake').value=S.wake;$('#sLevel').value=S.level;$('#sTurn').value=S.turnW;$('#sRate').value=S.rate;$('#sDj').checked=S.dj;$('#sYt').value=S.yt;$('#sStats').textContent=statsText();$('#settings').hidden=false};
-$('#sClose').onclick=()=>{S.wake=($('#sWake').value||'atajo').trim().toLowerCase();S.level=+$('#sLevel').value;S.turnW=+$('#sTurn').value;S.rate=+$('#sRate').value;S.dj=$('#sDj').checked;S.yt=$('#sYt').value.trim();saveS();$('#settings').hidden=true;uiMic();if(ROUTES.length&&!NAV.on){ROUTES=rankList(ROUTES);SEL=0;drawRoutes();renderCards()}};
+$('#cog').onclick=()=>{$('#sWake').value=S.wake;$('#sLevel').value=S.level;$('#sTurn').value=S.turnW;$('#sRate').value=S.rate;$('#sDj').checked=S.dj;$('#sYt').value=S.yt;$('#sMb').value=S.mb;$('#sStats').textContent=statsText();$('#settings').hidden=false};
+$('#sClose').onclick=()=>{S.wake=($('#sWake').value||'atajo').trim().toLowerCase();S.level=+$('#sLevel').value;S.turnW=+$('#sTurn').value;S.rate=+$('#sRate').value;S.dj=$('#sDj').checked;S.yt=$('#sYt').value.trim();S.mb=$('#sMb').value.trim();saveS();$('#settings').hidden=true;uiMic();updNote();if(ROUTES.length&&!NAV.on){ROUTES=rankList(ROUTES);SEL=0;drawRoutes();renderCards()}};
 $('#sTest').onclick=()=>{S.rate=+$('#sRate').value;try{speechSynthesis.cancel()}catch(e){}speak('Hola, soy tu copiloto. Ahora vas por la Avenida Caracas. Es la Carrera 14.','cmd')};
 $('#sReset').onclick=()=>{if(confirm('¿Borrar lo aprendido de tus viajes?')){S.stats={};S.seen=[];saveS();$('#sStats').textContent=statsText()}};
 document.addEventListener('click',e=>{if(!e.target.closest('#top'))hideSug()});
-$('#mvol').value=S.vol;uiMic();
+$('#mvol').value=S.vol;uiMic();updNote();
 if('geolocation' in navigator){getPos().then(p=>{map.setView([p.lat,p.lng],14);setMe([p.lng,p.lat],null)}).catch(()=>{})}
 </script>
 </body>
