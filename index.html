@@ -354,13 +354,15 @@ async function buildRoutes(o,d,light){
   const best=out[0],c=best.coords,cum=best.cum,tot=cum[cum.length-1];
   const off=Math.min(600,Math.max(150,tot*.15));
   const jobs=[];
-  for(const f of[.3,.5,.7])for(const side of[-1,1]){
+  const addJob=(f,side,m)=>{
     const idx=Math.max(1,cum.findIndex(x=>x>=tot*f));const p=c[idx],a=c[Math.max(0,idx-5)],b=c[Math.min(c.length-1,idx+5)];
-    const via=offset(p,bearing(a,b)+90*side,off);jobs.push(via);
-  }
+    jobs.push(offset(p,bearing(a,b)+90*side,m));
+  };
+  for(const f of[.2,.35,.5,.65,.8])for(const side of[-1,1])addJob(f,side,off);
+  for(const f of[.35,.65])for(const side of[-1,1])addJob(f,side,off*1.8);
   const res=[];
-  for(let i=0;i<jobs.length;i+=3){
-    const part=await Promise.allSettled(jobs.slice(i,i+3).map(v=>osrm([o,v,d],false)));
+  for(let i=0;i<jobs.length;i+=4){
+    const part=await Promise.allSettled(jobs.slice(i,i+4).map(v=>osrm([o,v,d],false)));
     part.forEach(x=>{if(x.status==='fulfilled'&&x.value[0])res.push(processRoute(x.value[0],'detour'))});
   }
   res.sort((a,b)=>a.dur-b.dur);
